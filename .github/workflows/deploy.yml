@@ -44,7 +44,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       # --------------------------
-      # Dockerイメージをビルド＆プッシュ（latestタグ付き）
+      # Dockerイメージをビルド＆プッシュ
       # --------------------------
       - name: Build and Push Docker image
         run: |
