@@ -6,7 +6,7 @@ on:
       - main  # mainブランチへのpushをトリガーに実行
 
 permissions:
-  id-token: write       # OIDCトークンを発行するために必要
+  id-token: write       # OIDCトークン発行に必要
   contents: read        # リポジトリ内容を取得するために必要
 
 env:
@@ -16,75 +16,50 @@ env:
   ECS_SERVICE: test-service
 
 jobs:
-  # --------------------------
-  # 1. Build & Push Job
-  # --------------------------
-  build:
-    name: Build and Push Docker image
+  build-and-deploy:
+    name: Build, Push and Deploy
     runs-on: ubuntu-latest
 
     steps:
+      # --------------------------
       # ソースコードをチェックアウト
+      # --------------------------
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # --------------------------
       # AWS認証情報を設定 (OIDCを利用)
+      # --------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-deploy-role
           aws-region: ${{ env.AWS_REGION }}
 
+      # --------------------------
       # ECRへログイン
+      # --------------------------
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # イメージをビルド
-      - name: Build Docker image
+      # --------------------------
+      # Dockerイメージをビルド＆プッシュ
+      # --------------------------
+      - name: Build and Push Docker image
         run: |
           IMAGE_TAG=${{ github.sha }}
-          docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+          IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}
+          echo "Building image: $IMAGE_URI"
+          
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
 
-      # イメージにタグを付与
-      - name: Tag Docker image
-        run: |
-          IMAGE_TAG=${{ github.sha }}
-          docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
-      # イメージをECRにプッシュ
-      - name: Push Docker image
-        run: |
-          IMAGE_TAG=${{ github.sha }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
-
-      # デプロイジョブにイメージ情報を渡す
-      - name: Export image URI
-        id: export-image
-        run: echo "image=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}" >> $GITHUB_OUTPUT
-        shell: bash
-
-    outputs:
-      image: ${{ steps.export-image.outputs.image }}
-
-  # --------------------------
-  # 2. Deploy Job
-  # --------------------------
-  deploy:
-    name: Deploy to ECS
-    runs-on: ubuntu-latest
-    needs: build   # buildジョブが完了してから実行
-
-    steps:
-      # AWS認証情報を設定
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-deploy-role
-          aws-region: ${{ env.AWS_REGION }}
-
-      # 新しいイメージでECSを更新
+      # --------------------------
+      # ECSへデプロイ
+      # --------------------------
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
