@@ -11,9 +11,9 @@ permissions:
 
 env:
   AWS_REGION: ap-northeast-1
-  ECR_REPOSITORY: handson-go-sample
-  ECS_CLUSTER: handson-cluster
-  ECS_SERVICE: handson-service
+  ECR_REPOSITORY: test-repository
+  ECS_CLUSTER: test-cluster
+  ECS_SERVICE: test-service
 
 jobs:
   # --------------------------
